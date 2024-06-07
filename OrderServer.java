@@ -9,6 +9,7 @@ public class OrderServer {
     private ServerSocket serverSocket;
     private List<OrderHandler> clients = new ArrayList<>();
     private DefaultTableModel tableModel;
+    private JTextArea logArea;
     private boolean running = true;
 
     public static void main(String[] args) {
@@ -30,11 +31,15 @@ public class OrderServer {
         frame.setLayout(new BorderLayout());
         frame.add(new JScrollPane(table), BorderLayout.CENTER);
 
+        logArea = new JTextArea();
+        logArea.setEditable(false);
+        frame.add(new JScrollPane(logArea), BorderLayout.EAST);
+
         JButton stopButton = new JButton("Stop Server");
         stopButton.addActionListener(e -> stopServer(frame));
         frame.add(stopButton, BorderLayout.SOUTH);
 
-        frame.setSize(400, 300);
+        frame.setSize(600, 300);
         frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         frame.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
@@ -94,12 +99,18 @@ public class OrderServer {
                 dos = new DataOutputStream(socket.getOutputStream());
                 while (running) {
                     String message = dis.readUTF();
-                    String[] parts = message.split(",");
-                    int tableNumber = Integer.parseInt(parts[0]);
-                    String item = parts[1];
-                    int quantity = Integer.parseInt(parts[2]);
-                    SwingUtilities.invokeLater(() -> tableModel.addRow(new Object[]{tableNumber, item, quantity}));
-                    dos.writeUTF("Order received: " + message);
+                    String[] orders = message.split("\n");
+                    for (String order : orders) {
+                        String[] parts = order.split(",");
+                        int tableNumber = Integer.parseInt(parts[0].trim());
+                        String item = parts[1].trim();
+                        int quantity = Integer.parseInt(parts[2].trim());
+                        SwingUtilities.invokeLater(() -> {
+                            tableModel.addRow(new Object[]{tableNumber, item, quantity});
+                            logArea.append("Received order: Table " + tableNumber + ", Item " + item + ", Quantity " + quantity + "\n");
+                        });
+                        dos.writeUTF("Order received: " + order);
+                    }
                 }
             } catch (EOFException e) {
                 System.out.println("Client disconnected");
