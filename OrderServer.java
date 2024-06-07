@@ -1,127 +1,143 @@
+import javax.swing.*;
+import java.awt.*;
 import java.io.*;
-import java.net.*;
-import java.util.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class OrderServer {
+public class OrderServer extends JFrame {
+    private JTextArea orderArea;
     private ServerSocket serverSocket;
-    private List<OrderHandler> clients = new ArrayList<>();
-    private boolean running = true;
+    private ConcurrentHashMap<Integer, Integer> tableTotalAmounts;
+    private static final int LINE_LENGTH = 29;
 
     public static void main(String[] args) {
-        try {
-            int port = getPortFromUser();
-            new OrderServer(port).start();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private static int getPortFromUser() {
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter port number: ");
-        return scanner.nextInt();
-    }
-
-    public OrderServer(int port) throws IOException {
-        serverSocket = new ServerSocket(port);
-        System.out.println("Server started on port: " + port);
-    }
-
-    public void start() {
-        System.out.println("Order Server started. Waiting for clients...");
-        while (running) {
+        SwingUtilities.invokeLater(() -> {
             try {
-                Socket socket = serverSocket.accept();
-                OrderHandler handler = new OrderHandler(socket);
-                clients.add(handler);
-                new Thread(handler).start();
+                new OrderServer();
             } catch (IOException e) {
-                if (running) {
-                    e.printStackTrace();
-                }
+                e.printStackTrace();
             }
-        }
-        stopServer();
+        });
     }
 
-    public void stopServer() {
-        running = false;
-        try {
-            for (OrderHandler handler : clients) {
-                handler.stop();
+    public OrderServer() throws IOException {
+        super("Order Server");
+
+        tableTotalAmounts = new ConcurrentHashMap<>();
+        orderArea = new JTextArea();
+        orderArea.setEditable(false);
+        orderArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+
+        JScrollPane scrollPane = new JScrollPane(orderArea);
+
+        JButton stopButton = new JButton("Stop Server");
+        stopButton.addActionListener(e -> stopServer());
+
+        setLayout(new BorderLayout());
+        add(scrollPane, BorderLayout.CENTER);
+        add(stopButton, BorderLayout.SOUTH);
+
+        setSize(600, 400);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setVisible(true);
+
+        int port = Integer.parseInt(JOptionPane.showInputDialog("Enter port number:"));
+        serverSocket = new ServerSocket(port);
+        orderArea.append("Server started on port: " + port + "\n");
+
+        new Thread(this::acceptClients).start();
+    }
+
+    private void acceptClients() {
+        while (true) {
+            try {
+                Socket clientSocket = serverSocket.accept();
+                new Thread(new OrderHandler(clientSocket)).start();
+            } catch (IOException e) {
+                orderArea.append("Error accepting client: " + e.getMessage() + "\n");
             }
-            serverSocket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
         }
+    }
+
+    private void stopServer() {
+        try {
+            serverSocket.close();
+            orderArea.append("Server stopped.\n");
+            System.exit(0);
+        } catch (IOException e) {
+            orderArea.append("Error stopping server: " + e.getMessage() + "\n");
+        }
+    }
+
+    private String formatLine(String text) {
+        if (text.length() > LINE_LENGTH) {
+            return text.substring(0, LINE_LENGTH - 1) + "│";
+        }
+        StringBuilder sb = new StringBuilder(text);
+        while (sb.length() < LINE_LENGTH) {
+            sb.append(" ");
+        }
+        sb.append("│");
+        return sb.toString();
     }
 
     private class OrderHandler implements Runnable {
-        private Socket socket;
-        private DataInputStream dis;
-        private DataOutputStream dos;
-        private boolean running = true;
-        private int tableNumber;
-        private int totalAmount = 0;
+        private Socket clientSocket;
 
         public OrderHandler(Socket socket) {
-            this.socket = socket;
+            this.clientSocket = socket;
         }
 
         @Override
         public void run() {
-            try {
-                dis = new DataInputStream(socket.getInputStream());
-                dos = new DataOutputStream(socket.getOutputStream());
+            try (DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
+                 DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())) {
 
-                tableNumber = dis.readInt(); // 클라이언트로부터 테이블 번호를 받음
-                System.out.println("Client connected: Table " + tableNumber);
+                int tableNumber = dis.readInt();
+                orderArea.append("New client connected: Table " + tableNumber + "\n");
 
-                while (running) {
+                while (true) {
                     String message = dis.readUTF();
-                    System.out.println("Received order from Table " + tableNumber + ": " + message); // 터미널에 주문 내역 출력
                     if (message.equals("disconnect")) {
-                        running = false;
-                        System.out.println("Client disconnected: Table " + tableNumber);
-                        dos.writeUTF("Disconnected. Total amount: " + totalAmount + "won");
+                        orderArea.append("Client disconnected: Table " + tableNumber + "\n");
+                        clientSocket.close();
+                        break;
                     } else if (message.equals("quit")) {
-                        running = false;
-                        System.out.println("Client quit: Table " + tableNumber);
+                        orderArea.append("Client quit: Table " + tableNumber + "\n");
+                        clientSocket.close();
+                        break;
                     } else {
-                        dos.writeUTF("Order received: " + message);
+                        int currentTotal = tableTotalAmounts.getOrDefault(tableNumber, 0);
+                        int newOrderTotal = Integer.parseInt(message.split("Total: ")[1].replace("won", "").trim());
+                        int newTotal = currentTotal + newOrderTotal;
+                        tableTotalAmounts.put(tableNumber, newTotal);
 
-                        String[] parts = message.split("\n");
-                        int orderAmount = 0;
-                        for (String part : parts) {
-                            if (part.startsWith("TableNo. ")) {
-                                String[] orderParts = part.split(", ");
-                                orderAmount += Integer.parseInt(orderParts[3].trim().substring(0, orderParts[3].length() - 3)); // 금액 추출
+                        String[] orderDetails = message.split("\n");
+                        StringBuilder displayMessage = new StringBuilder();
+                        displayMessage.append("┌───────────────────────────┐\n");
+                        displayMessage.append(formatLine("│ TABLE NO: " + tableNumber)).append("\n");
+                        displayMessage.append(formatLine("│")).append("\n");
+                        displayMessage.append(formatLine("│ Current order Item:")).append("\n");
+                        for (String detail : orderDetails) {
+                            if (detail.startsWith("TableNo.")) {
+                                String[] parts = detail.split(", ");
+                                displayMessage.append(formatLine("│ " + parts[1] + " " + parts[2])).append("\n");
                             }
                         }
-                        totalAmount += orderAmount;
-                        System.out.println("Total for Table " + tableNumber + ": " + totalAmount + "won");
+                        displayMessage.append(formatLine("│")).append("\n");
+                        displayMessage.append(formatLine("│ Current order total:")).append("\n");
+                        displayMessage.append(formatLine("│ " + newOrderTotal + " won")).append("\n");
+                        displayMessage.append(formatLine("│")).append("\n");
+                        displayMessage.append(formatLine("│ Total Ordered:")).append("\n");
+                        displayMessage.append(formatLine("│ " + newTotal + " won")).append("\n");
+                        displayMessage.append("└───────────────────────────┘\n");
+
+                        orderArea.append(displayMessage.toString());
                     }
                 }
-            } catch (EOFException e) {
-                System.out.println("Client disconnected unexpectedly: Table " + tableNumber);
             } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                try {
-                    socket.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                clients.remove(this);
-            }
-        }
-
-        public void stop() {
-            running = false;
-            try {
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+                orderArea.append("Client connection error: " + e.getMessage() + "\n");
             }
         }
     }

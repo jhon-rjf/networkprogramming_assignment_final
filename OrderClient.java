@@ -43,7 +43,7 @@ public class OrderClient {
     }
 
     public void start() {
-        JFrame frame = new JFrame("Order Client");
+        JFrame frame = new JFrame("Order Client - TABLE NO: " + tableNumber);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(600, 800);  // Adjusted size to accommodate images
         frame.setLayout(new GridLayout(10, 2));
