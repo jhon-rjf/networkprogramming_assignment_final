@@ -80,19 +80,30 @@ public class OrderServer {
                 while (running) {
                     String message = dis.readUTF();
                     System.out.println("Received order from Table " + tableNumber + ": " + message); // 터미널에 주문 내역 출력
-                    dos.writeUTF("Order received: " + message);
+                    if (message.equals("disconnect")) {
+                        running = false;
+                        System.out.println("Client disconnected: Table " + tableNumber);
+                        dos.writeUTF("Disconnected. Total amount: " + totalAmount + "won");
+                    } else if (message.equals("quit")) {
+                        running = false;
+                        System.out.println("Client quit: Table " + tableNumber);
+                    } else {
+                        dos.writeUTF("Order received: " + message);
 
-                    String[] parts = message.split("\n");
-                    int orderAmount = 0;
-                    for (String part : parts) {
-                        if (part.startsWith("TableNo. ")) {
-                            String[] orderParts = part.split(", ");
-                            orderAmount += Integer.parseInt(orderParts[3].trim().substring(1)); // 금액 추출
+                        String[] parts = message.split("\n");
+                        int orderAmount = 0;
+                        for (String part : parts) {
+                            if (part.startsWith("TableNo. ")) {
+                                String[] orderParts = part.split(", ");
+                                orderAmount += Integer.parseInt(orderParts[3].trim().substring(0, orderParts[3].length() - 3)); // 금액 추출
+                            }
                         }
+                        totalAmount += orderAmount;
+                        System.out.println("Total for Table " + tableNumber + ": " + totalAmount + "won");
                     }
-                    totalAmount += orderAmount;
-                    System.out.println("Total for Table " + tableNumber + ": $" + totalAmount);
                 }
+            } catch (EOFException e) {
+                System.out.println("Client disconnected unexpectedly: Table " + tableNumber);
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
