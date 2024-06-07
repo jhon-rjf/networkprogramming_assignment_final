@@ -3,6 +3,7 @@ import java.net.*;
 import java.util.*;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import java.awt.BorderLayout;
 
 public class OrderServer {
     private ServerSocket serverSocket;
@@ -26,14 +27,19 @@ public class OrderServer {
         JFrame frame = new JFrame("Order Server");
         tableModel = new DefaultTableModel(new Object[]{"Table Number", "Item", "Quantity"}, 0);
         JTable table = new JTable(tableModel);
-        frame.add(new JScrollPane(table));
+        frame.setLayout(new BorderLayout());
+        frame.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        JButton stopButton = new JButton("Stop Server");
+        stopButton.addActionListener(e -> stopServer(frame));
+        frame.add(stopButton, BorderLayout.SOUTH);
+
         frame.setSize(400, 300);
         frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         frame.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent windowEvent) {
-                stopServer();
-                frame.dispose();
+                stopServer(frame);
             }
         });
         frame.setVisible(true);
@@ -53,16 +59,19 @@ public class OrderServer {
                 }
             }
         }
-        stopServer();
+        stopServer(null);
     }
 
-    public void stopServer() {
+    public void stopServer(JFrame frame) {
         running = false;
         try {
             for (OrderHandler handler : clients) {
                 handler.stop();
             }
             serverSocket.close();
+            if (frame != null) {
+                frame.dispose();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -92,6 +101,8 @@ public class OrderServer {
                     SwingUtilities.invokeLater(() -> tableModel.addRow(new Object[]{tableNumber, item, quantity}));
                     dos.writeUTF("Order received: " + message);
                 }
+            } catch (EOFException e) {
+                System.out.println("Client disconnected");
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
@@ -100,6 +111,7 @@ public class OrderServer {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+                clients.remove(this);
             }
         }
 
@@ -113,4 +125,3 @@ public class OrderServer {
         }
     }
 }
-

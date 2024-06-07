@@ -109,4 +109,3 @@ public class OrderClient {
         totalLabel.setText("Total: $" + total);
     }
 }
-
