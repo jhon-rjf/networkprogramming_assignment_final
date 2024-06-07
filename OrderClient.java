@@ -11,7 +11,7 @@ public class OrderClient {
     private Socket socket;
     private DataInputStream dis;
     private DataOutputStream dos;
-    private JTextField tableField;
+    private int tableNumber;
     private JCheckBox[] itemChecks;
     private JComboBox<Integer>[] quantityBoxes;
     private JLabel totalLabel;
@@ -29,17 +29,21 @@ public class OrderClient {
             try {
                 String serverAddress = JOptionPane.showInputDialog("Enter server address:");
                 int port = Integer.parseInt(JOptionPane.showInputDialog("Enter port number:"));
-                new OrderClient(serverAddress, port).start();
+                int tableNumber = Integer.parseInt(JOptionPane.showInputDialog("Enter table number:"));
+                new OrderClient(serverAddress, port, tableNumber).start();
             } catch (IOException e) {
                 e.printStackTrace();
             }
         });
     }
 
-    public OrderClient(String serverAddress, int port) throws IOException {
+    public OrderClient(String serverAddress, int port, int tableNumber) throws IOException {
+        this.tableNumber = tableNumber;
         socket = new Socket(serverAddress, port);
         dis = new DataInputStream(socket.getInputStream());
         dos = new DataOutputStream(socket.getOutputStream());
+        dos.writeInt(tableNumber); // 테이블 번호를 서버로 전송
+        dos.flush();
     }
 
     public void start() {
@@ -47,10 +51,6 @@ public class OrderClient {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(400, 300);
         frame.setLayout(new GridLayout(7, 2));
-
-        frame.add(new JLabel("Table Number:"));
-        tableField = new JTextField();
-        frame.add(tableField);
 
         itemChecks = new JCheckBox[3];
         quantityBoxes = new JComboBox[3];
@@ -75,7 +75,6 @@ public class OrderClient {
             @Override
             public void actionPerformed(ActionEvent e) {
                 try {
-                    int tableNumber = Integer.parseInt(tableField.getText());
                     StringBuilder message = new StringBuilder();
                     StringBuilder alertMessage = new StringBuilder("TableNo. " + tableNumber);
                     int orderTotal = 0;

@@ -6,7 +6,6 @@ public class OrderServer {
     private ServerSocket serverSocket;
     private List<OrderHandler> clients = new ArrayList<>();
     private boolean running = true;
-    private int totalAmount = 0; // 총 주문 금액을 저장할 변수
 
     public static void main(String[] args) {
         try {
@@ -57,16 +56,13 @@ public class OrderServer {
         }
     }
 
-    private synchronized void addOrderAmount(int amount) {
-        totalAmount += amount;
-        System.out.println("Total Order Amount: $" + totalAmount);
-    }
-
     private class OrderHandler implements Runnable {
         private Socket socket;
         private DataInputStream dis;
         private DataOutputStream dos;
         private boolean running = true;
+        private int tableNumber;
+        private int totalAmount = 0;
 
         public OrderHandler(Socket socket) {
             this.socket = socket;
@@ -77,19 +73,25 @@ public class OrderServer {
             try {
                 dis = new DataInputStream(socket.getInputStream());
                 dos = new DataOutputStream(socket.getOutputStream());
+
+                tableNumber = dis.readInt(); // 클라이언트로부터 테이블 번호를 받음
+                System.out.println("Client connected: Table " + tableNumber);
+
                 while (running) {
                     String message = dis.readUTF();
-                    System.out.println("Received order: " + message); // 터미널에 주문 내역 출력
+                    System.out.println("Received order from Table " + tableNumber + ": " + message); // 터미널에 주문 내역 출력
                     dos.writeUTF("Order received: " + message);
 
                     String[] parts = message.split("\n");
                     int orderAmount = 0;
                     for (String part : parts) {
-                        if (part.startsWith("Total: $")) {
-                            orderAmount += Integer.parseInt(part.replace("Total: $", "").trim());
+                        if (part.startsWith("TableNo. ")) {
+                            String[] orderParts = part.split(", ");
+                            orderAmount += Integer.parseInt(orderParts[3].trim().substring(1)); // 금액 추출
                         }
                     }
-                    addOrderAmount(orderAmount);
+                    totalAmount += orderAmount;
+                    System.out.println("Total for Table " + tableNumber + ": $" + totalAmount);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
