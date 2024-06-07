@@ -50,8 +50,9 @@ public class OrderClient {
 
         itemChecks = new JCheckBox[3];
         quantityBoxes = new JComboBox[3];
-        String[] itemImages = { "./3.png", "./2.png", "./1.png" }; // 이미지 파일 경로
-        Dimension[] imageSizes = { new Dimension(74, 62), new Dimension(74, 62), new Dimension(62, 74) }; // 이미지 크기
+        final String[] itemImages = { "./3.png", "./2.png", "./1.png" }; 
+        final Dimension[] imageSizes = { new Dimension(74, 62), new Dimension(74, 62), new Dimension(62, 74) }; 
+
         int index = 0;
         for (String item : itemPrices.keySet()) {
             JPanel itemPanel = new JPanel(new BorderLayout());
@@ -110,7 +111,7 @@ public class OrderClient {
                     message.append("Total: ").append(currentOrderTotal).append("won");
                     dos.writeUTF(message.toString().trim());
                     dos.flush();
-                    JOptionPane.showMessageDialog(frame, alertMessage.toString()); // 알림창에 주문 내역 표시
+                    JOptionPane.showMessageDialog(frame, alertMessage.toString());
                     totalOrderLabel.setText("Total Ordered: " + totalAmount + "won");
                 } catch (IOException ex) {
                     ex.printStackTrace();
@@ -164,7 +165,7 @@ public class OrderClient {
         socket = new Socket(serverAddress, port);
         dis = new DataInputStream(socket.getInputStream());
         dos = new DataOutputStream(socket.getOutputStream());
-        dos.writeInt(tableNumber); // 테이블 번호를 서버로 전송
+        dos.writeInt(tableNumber);
         dos.flush();
     }
 

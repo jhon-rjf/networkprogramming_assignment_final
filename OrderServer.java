@@ -3,10 +3,7 @@ import java.awt.*;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
+import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Map;
@@ -62,12 +59,16 @@ public class OrderServer extends JFrame {
         JButton settlementButton = new JButton("Settlement");
         settlementButton.addActionListener(e -> settleAccounts());
 
+        JButton showDataButton = new JButton("Show Data");
+        showDataButton.addActionListener(e -> showSettlementData());
+
         setLayout(new BorderLayout());
         add(scrollPane, BorderLayout.CENTER);
 
-        JPanel bottomPanel = new JPanel(new GridLayout(1, 2));
+        JPanel bottomPanel = new JPanel(new GridLayout(1, 3));
         bottomPanel.add(stopButton);
         bottomPanel.add(settlementButton);
+        bottomPanel.add(showDataButton);
         add(bottomPanel, BorderLayout.SOUTH);
 
         setSize(600, 400);
@@ -107,13 +108,13 @@ public class OrderServer extends JFrame {
 
     private String formatLine(String text) {
         if (text.length() > LINE_LENGTH) {
-            return text.substring(0, LINE_LENGTH - 1) + "│";
+            return text.substring(0, LINE_LENGTH - 1) + "|";
         }
         StringBuilder sb = new StringBuilder(text);
         while (sb.length() < LINE_LENGTH) {
             sb.append(" ");
         }
-        sb.append("│");
+        sb.append("|");
         return sb.toString();
     }
 
@@ -134,6 +135,30 @@ public class OrderServer extends JFrame {
             orderArea.append("Settlement completed at " + timestamp + "\n");
         } catch (SQLException e) {
             orderArea.append("Error during settlement: " + e.getMessage() + "\n");
+        }
+    }
+
+    private void showSettlementData() {
+        try (Statement stmt = dbConnection.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT * FROM settlements")) {
+
+            StringBuilder data = new StringBuilder();
+            data.append("No. | Time                | TableNum | Amount\n");
+            data.append("----|---------------------|----------|-------\n");
+
+            while (rs.next()) {
+                int id = rs.getInt("id");
+                String timestamp = rs.getString("timestamp");
+                int tableNumber = rs.getInt("table_number");
+                int totalAmount = rs.getInt("total_amount");
+
+                data.append(String.format("%-4d| %-20s | %-8d | %-6d\n", id, timestamp, tableNumber, totalAmount));
+            }
+
+            orderArea.append(data.toString());
+
+        } catch (SQLException e) {
+            orderArea.append("Error retrieving data: " + e.getMessage() + "\n");
         }
     }
 
@@ -170,23 +195,23 @@ public class OrderServer extends JFrame {
 
                         String[] orderDetails = message.split("\n");
                         StringBuilder displayMessage = new StringBuilder();
-                        displayMessage.append("┌───────────────────────────┐\n");
-                        displayMessage.append(formatLine("│ TABLE NO: " + tableNumber)).append("\n");
-                        displayMessage.append(formatLine("│")).append("\n");
-                        displayMessage.append(formatLine("│ Current order Item:")).append("\n");
+                        displayMessage.append("+-----------------------------+\n");
+                        displayMessage.append(formatLine("| TABLE NO: " + tableNumber)).append("\n");
+                        displayMessage.append(formatLine("|")).append("\n");
+                        displayMessage.append(formatLine("| Current order Item:")).append("\n");
                         for (String detail : orderDetails) {
                             if (detail.startsWith("TableNo.")) {
                                 String[] parts = detail.split(", ");
-                                displayMessage.append(formatLine("│ " + parts[1] + " " + parts[2])).append("\n");
+                                displayMessage.append(formatLine("| " + parts[1] + " " + parts[2])).append("\n");
                             }
                         }
-                        displayMessage.append(formatLine("│")).append("\n");
-                        displayMessage.append(formatLine("│ Current order total:")).append("\n");
-                        displayMessage.append(formatLine("│ " + newOrderTotal + " won")).append("\n");
-                        displayMessage.append(formatLine("│")).append("\n");
-                        displayMessage.append(formatLine("│ Total Ordered:")).append("\n");
-                        displayMessage.append(formatLine("│ " + newTotal + " won")).append("\n");
-                        displayMessage.append("└───────────────────────────┘\n");
+                        displayMessage.append(formatLine("|")).append("\n");
+                        displayMessage.append(formatLine("| Current order total:")).append("\n");
+                        displayMessage.append(formatLine("| " + newOrderTotal + " won")).append("\n");
+                        displayMessage.append(formatLine("|")).append("\n");
+                        displayMessage.append(formatLine("| Total Ordered:")).append("\n");
+                        displayMessage.append(formatLine("| " + newTotal + " won")).append("\n");
+                        displayMessage.append("+-----------------------------+\n");
 
                         orderArea.append(displayMessage.toString());
                     }
