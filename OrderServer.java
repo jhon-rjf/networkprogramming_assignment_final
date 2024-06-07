@@ -1,53 +1,31 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
-import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
-import java.awt.BorderLayout;
 
 public class OrderServer {
     private ServerSocket serverSocket;
     private List<OrderHandler> clients = new ArrayList<>();
-    private DefaultTableModel tableModel;
-    private JTextArea logArea;
     private boolean running = true;
+    private int totalAmount = 0; // 총 주문 금액을 저장할 변수
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            try {
-                int port = Integer.parseInt(JOptionPane.showInputDialog("Enter port number:"));
-                new OrderServer(port).start();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+        try {
+            int port = getPortFromUser();
+            new OrderServer(port).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static int getPortFromUser() {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter port number: ");
+        return scanner.nextInt();
     }
 
     public OrderServer(int port) throws IOException {
         serverSocket = new ServerSocket(port);
-        JFrame frame = new JFrame("Order Server");
-        tableModel = new DefaultTableModel(new Object[]{"Table Number", "Item", "Quantity"}, 0);
-        JTable table = new JTable(tableModel);
-        frame.setLayout(new BorderLayout());
-        frame.add(new JScrollPane(table), BorderLayout.CENTER);
-
-        logArea = new JTextArea();
-        logArea.setEditable(false);
-        frame.add(new JScrollPane(logArea), BorderLayout.EAST);
-
-        JButton stopButton = new JButton("Stop Server");
-        stopButton.addActionListener(e -> stopServer(frame));
-        frame.add(stopButton, BorderLayout.SOUTH);
-
-        frame.setSize(600, 300);
-        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        frame.addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowClosing(java.awt.event.WindowEvent windowEvent) {
-                stopServer(frame);
-            }
-        });
-        frame.setVisible(true);
+        System.out.println("Server started on port: " + port);
     }
 
     public void start() {
@@ -64,22 +42,24 @@ public class OrderServer {
                 }
             }
         }
-        stopServer(null);
+        stopServer();
     }
 
-    public void stopServer(JFrame frame) {
+    public void stopServer() {
         running = false;
         try {
             for (OrderHandler handler : clients) {
                 handler.stop();
             }
             serverSocket.close();
-            if (frame != null) {
-                frame.dispose();
-            }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private synchronized void addOrderAmount(int amount) {
+        totalAmount += amount;
+        System.out.println("Total Order Amount: $" + totalAmount);
     }
 
     private class OrderHandler implements Runnable {
@@ -99,21 +79,18 @@ public class OrderServer {
                 dos = new DataOutputStream(socket.getOutputStream());
                 while (running) {
                     String message = dis.readUTF();
-                    String[] orders = message.split("\n");
-                    for (String order : orders) {
-                        String[] parts = order.split(",");
-                        int tableNumber = Integer.parseInt(parts[0].trim());
-                        String item = parts[1].trim();
-                        int quantity = Integer.parseInt(parts[2].trim());
-                        SwingUtilities.invokeLater(() -> {
-                            tableModel.addRow(new Object[]{tableNumber, item, quantity});
-                            logArea.append("Received order: Table " + tableNumber + ", Item " + item + ", Quantity " + quantity + "\n");
-                        });
-                        dos.writeUTF("Order received: " + order);
+                    System.out.println("Received order: " + message); // 터미널에 주문 내역 출력
+                    dos.writeUTF("Order received: " + message);
+
+                    String[] parts = message.split("\n");
+                    int orderAmount = 0;
+                    for (String part : parts) {
+                        if (part.startsWith("Total: $")) {
+                            orderAmount += Integer.parseInt(part.replace("Total: $", "").trim());
+                        }
                     }
+                    addOrderAmount(orderAmount);
                 }
-            } catch (EOFException e) {
-                System.out.println("Client disconnected");
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {

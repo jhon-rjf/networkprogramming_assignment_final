@@ -19,9 +19,9 @@ public class OrderClient {
 
     static {
         itemPrices = new HashMap<>();
-        itemPrices.put("Item1", 10);
-        itemPrices.put("Item2", 15);
-        itemPrices.put("Item3", 20);
+        itemPrices.put("Item1 ($10)", 10);
+        itemPrices.put("Item2 ($15)", 15);
+        itemPrices.put("Item3 ($20)", 20);
     }
 
     public static void main(String[] args) {
@@ -77,17 +77,22 @@ public class OrderClient {
                 try {
                     int tableNumber = Integer.parseInt(tableField.getText());
                     StringBuilder message = new StringBuilder();
+                    StringBuilder alertMessage = new StringBuilder("TableNo. " + tableNumber);
+                    int orderTotal = 0;
                     for (int i = 0; i < itemChecks.length; i++) {
                         if (itemChecks[i].isSelected()) {
                             String item = itemChecks[i].getText();
                             int quantity = (Integer) quantityBoxes[i].getSelectedItem();
-                            message.append(tableNumber).append(",").append(item).append(",").append(quantity).append("\n");
+                            int price = itemPrices.get(item);
+                            orderTotal += price * quantity;
+                            message.append("TableNo. ").append(tableNumber).append(", ").append(item).append(", ").append(quantity).append("EA, $").append(price * quantity).append("\n");
+                            alertMessage.append(", ").append(item).append(" ").append(quantity).append("EA");
                         }
                     }
+                    message.append("Total: $").append(orderTotal);
                     dos.writeUTF(message.toString().trim());
                     dos.flush();
-                    String response = dis.readUTF();
-                    JOptionPane.showMessageDialog(frame, response);
+                    JOptionPane.showMessageDialog(frame, alertMessage.toString()); // 알림창에 주문 내역 표시
                 } catch (IOException ex) {
                     ex.printStackTrace();
                 }
