@@ -3,6 +3,13 @@ import java.awt.*;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class OrderServer extends JFrame {
@@ -10,19 +17,37 @@ public class OrderServer extends JFrame {
     private ServerSocket serverSocket;
     private ConcurrentHashMap<Integer, Integer> tableTotalAmounts;
     private static final int LINE_LENGTH = 29;
+    private Connection dbConnection;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
                 new OrderServer();
-            } catch (IOException e) {
+            } catch (IOException | SQLException e) {
                 e.printStackTrace();
             }
         });
     }
 
-    public OrderServer() throws IOException {
+    public OrderServer() throws IOException, SQLException {
         super("Order Server");
+
+        // Load SQLite JDBC driver
+        try {
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "SQLite JDBC driver not found. Please add the driver to your classpath.", "Error", JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        }
+
+        // Initialize database connection
+        dbConnection = DriverManager.getConnection("jdbc:sqlite:orders.db");
+        try (PreparedStatement stmt = dbConnection.prepareStatement(
+                "CREATE TABLE IF NOT EXISTS settlements (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, table_number INTEGER, total_amount INTEGER)"
+        )) {
+            stmt.execute();
+        }
 
         tableTotalAmounts = new ConcurrentHashMap<>();
         orderArea = new JTextArea();
@@ -34,9 +59,16 @@ public class OrderServer extends JFrame {
         JButton stopButton = new JButton("Stop Server");
         stopButton.addActionListener(e -> stopServer());
 
+        JButton settlementButton = new JButton("Settlement");
+        settlementButton.addActionListener(e -> settleAccounts());
+
         setLayout(new BorderLayout());
         add(scrollPane, BorderLayout.CENTER);
-        add(stopButton, BorderLayout.SOUTH);
+
+        JPanel bottomPanel = new JPanel(new GridLayout(1, 2));
+        bottomPanel.add(stopButton);
+        bottomPanel.add(settlementButton);
+        add(bottomPanel, BorderLayout.SOUTH);
 
         setSize(600, 400);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -63,9 +95,12 @@ public class OrderServer extends JFrame {
     private void stopServer() {
         try {
             serverSocket.close();
+            if (dbConnection != null && !dbConnection.isClosed()) {
+                dbConnection.close();
+            }
             orderArea.append("Server stopped.\n");
             System.exit(0);
-        } catch (IOException e) {
+        } catch (IOException | SQLException e) {
             orderArea.append("Error stopping server: " + e.getMessage() + "\n");
         }
     }
@@ -80,6 +115,26 @@ public class OrderServer extends JFrame {
         }
         sb.append("│");
         return sb.toString();
+    }
+
+    private void settleAccounts() {
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String timestamp = dateFormat.format(new Date());
+
+        try (PreparedStatement stmt = dbConnection.prepareStatement(
+                "INSERT INTO settlements (timestamp, table_number, total_amount) VALUES (?, ?, ?)"
+        )) {
+            for (Map.Entry<Integer, Integer> entry : tableTotalAmounts.entrySet()) {
+                stmt.setString(1, timestamp);
+                stmt.setInt(2, entry.getKey());
+                stmt.setInt(3, entry.getValue());
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+            orderArea.append("Settlement completed at " + timestamp + "\n");
+        } catch (SQLException e) {
+            orderArea.append("Error during settlement: " + e.getMessage() + "\n");
+        }
     }
 
     private class OrderHandler implements Runnable {
