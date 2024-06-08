@@ -1,3 +1,7 @@
+/*-----------------------------------------------------------------------------------
+compile - javac OrderClient.java
+run - java OrderClient
+-----------------------------------------------------------------------------------*/
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;

@@ -1,27 +1,31 @@
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent; // 추가
+import java.awt.event.ActionListener; // 추가
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class OrderServer extends JFrame {
     private JTextArea orderArea;
     private ServerSocket serverSocket;
-    private ConcurrentHashMap<Integer, Integer> tableTotalAmounts;
+    private Map<Integer, Integer> tableTotalAmounts;
     private static final int LINE_LENGTH = 29;
     private Connection dbConnection;
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            try {
-                new OrderServer();
-            } catch (IOException | SQLException e) {
-                e.printStackTrace();
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                try {
+                    new OrderServer();
+                } catch (IOException | SQLException e) {
+                    e.printStackTrace();
+                }
             }
         });
     }
@@ -29,7 +33,7 @@ public class OrderServer extends JFrame {
     public OrderServer() throws IOException, SQLException {
         super("Order Server");
 
-        // Load SQLite JDBC driver
+        // SQLite JDBC 드라이버 로드
         try {
             Class.forName("org.sqlite.JDBC");
         } catch (ClassNotFoundException e) {
@@ -38,15 +42,11 @@ public class OrderServer extends JFrame {
             System.exit(1);
         }
 
-        // Initialize database connection
+        // 데이터베이스 연결 초기화
         dbConnection = DriverManager.getConnection("jdbc:sqlite:orders.db");
-        try (PreparedStatement stmt = dbConnection.prepareStatement(
-                "CREATE TABLE IF NOT EXISTS settlements (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, table_number INTEGER, total_amount INTEGER)"
-        )) {
-            stmt.execute();
-        }
+        createTableIfNotExists();
 
-        tableTotalAmounts = new ConcurrentHashMap<>();
+        tableTotalAmounts = new HashMap<>();
         orderArea = new JTextArea();
         orderArea.setEditable(false);
         orderArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
@@ -54,13 +54,25 @@ public class OrderServer extends JFrame {
         JScrollPane scrollPane = new JScrollPane(orderArea);
 
         JButton stopButton = new JButton("Stop Server");
-        stopButton.addActionListener(e -> stopServer());
+        stopButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                stopServer();
+            }
+        });
 
         JButton settlementButton = new JButton("Settlement");
-        settlementButton.addActionListener(e -> settleAccounts());
+        settlementButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                settleAccounts();
+            }
+        });
 
         JButton showDataButton = new JButton("Show Data");
-        showDataButton.addActionListener(e -> showSettlementData());
+        showDataButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                showSettlementData();
+            }
+        });
 
         setLayout(new BorderLayout());
         add(scrollPane, BorderLayout.CENTER);
@@ -79,7 +91,18 @@ public class OrderServer extends JFrame {
         serverSocket = new ServerSocket(port);
         orderArea.append("Server started on port: " + port + "\n");
 
-        new Thread(this::acceptClients).start();
+        new Thread(new Runnable() {
+            public void run() {
+                acceptClients();
+            }
+        }).start();
+    }
+
+    private void createTableIfNotExists() throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS settlements (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, table_number INTEGER, total_amount INTEGER)";
+        PreparedStatement stmt = dbConnection.prepareStatement(sql);
+        stmt.execute();
+        stmt.close();
     }
 
     private void acceptClients() {
@@ -122,9 +145,9 @@ public class OrderServer extends JFrame {
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         String timestamp = dateFormat.format(new Date());
 
-        try (PreparedStatement stmt = dbConnection.prepareStatement(
-                "INSERT INTO settlements (timestamp, table_number, total_amount) VALUES (?, ?, ?)"
-        )) {
+        try {
+            String sql = "INSERT INTO settlements (timestamp, table_number, total_amount) VALUES (?, ?, ?)";
+            PreparedStatement stmt = dbConnection.prepareStatement(sql);
             for (Map.Entry<Integer, Integer> entry : tableTotalAmounts.entrySet()) {
                 stmt.setString(1, timestamp);
                 stmt.setInt(2, entry.getKey());
@@ -132,6 +155,7 @@ public class OrderServer extends JFrame {
                 stmt.addBatch();
             }
             stmt.executeBatch();
+            stmt.close();
             orderArea.append("Settlement completed at " + timestamp + "\n");
         } catch (SQLException e) {
             orderArea.append("Error during settlement: " + e.getMessage() + "\n");
@@ -139,8 +163,9 @@ public class OrderServer extends JFrame {
     }
 
     private void showSettlementData() {
-        try (Statement stmt = dbConnection.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM settlements")) {
+        try {
+            Statement stmt = dbConnection.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT * FROM settlements");
 
             StringBuilder data = new StringBuilder();
             data.append("No. | Time                | TableNum | Amount\n");
@@ -156,7 +181,8 @@ public class OrderServer extends JFrame {
             }
 
             orderArea.append(data.toString());
-
+            rs.close();
+            stmt.close();
         } catch (SQLException e) {
             orderArea.append("Error retrieving data: " + e.getMessage() + "\n");
         }
@@ -171,20 +197,17 @@ public class OrderServer extends JFrame {
 
         @Override
         public void run() {
-            try (DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
-                 DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())) {
+            try {
+                DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
+                DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream());
 
                 int tableNumber = dis.readInt();
                 orderArea.append("New client connected: Table " + tableNumber + "\n");
 
                 while (true) {
                     String message = dis.readUTF();
-                    if (message.equals("disconnect")) {
+                    if (message.equals("disconnect") || message.equals("quit")) {
                         orderArea.append("Client disconnected: Table " + tableNumber + "\n");
-                        clientSocket.close();
-                        break;
-                    } else if (message.equals("quit")) {
-                        orderArea.append("Client quit: Table " + tableNumber + "\n");
                         clientSocket.close();
                         break;
                     } else {
